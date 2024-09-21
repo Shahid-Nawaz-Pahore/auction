@@ -32,7 +32,6 @@ app.post('/create-auction', async (req, res) => {
     try {
         const { auctionType, startPrice, endTime, priceDecrement } = req.body;
 
-        // Validate inputs
         if (typeof auctionType !== 'number' || typeof startPrice !== 'number' || typeof endTime !== 'number' || typeof priceDecrement !== 'number') {
             return res.status(400).json({ error: 'Invalid data types provided.' });
         }
@@ -42,33 +41,31 @@ app.post('/create-auction', async (req, res) => {
             return res.status(400).json({ error: 'End time must be in the future.' });
         }
 
-        // Get current gas price
+        // Get current gas price and fee parameters
         const gasPrice = await provider.getGasPrice();
+        const maxPriorityFeePerGas = await provider.send('eth_maxPriorityFeePerGas', []); // Fetch recommended priority fee
 
-        // Define new gas fee parameters
-        const newMaxFeePerGas = gasPrice.mul(2); // Set to double the current gas price
-        const newMaxPriorityFeePerGas = ethers.utils.parseUnits('2', 'gwei'); // 2 Gwei priority fee
+        // Set transaction gas fees
+        const newMaxFeePerGas = gasPrice.mul(2); // Set maxFeePerGas to 2x current gas price
+        const newMaxPriorityFeePerGas = ethers.BigNumber.from(maxPriorityFeePerGas); // Convert the priority fee to a BigNumber
 
-        // Create auction
+        // Create auction transaction
         const tx = await auctionContract.createAuction(auctionType, startPrice, endTime, priceDecrement, {
-            gasLimit: 1000000, // Adjust as necessary
+            gasLimit: 1000000, // Adjust as needed
             maxFeePerGas: newMaxFeePerGas,
-            maxPriorityFeePerGas: newMaxPriorityFeePerGas
+            maxPriorityFeePerGas: newMaxPriorityFeePerGas,
         });
 
-        await tx.wait(); // Wait for the transaction to be mined
+        await tx.wait(); // Wait for transaction to be mined
         res.status(200).json({ message: 'Auction created successfully', transactionHash: tx.hash });
     } catch (error) {
         console.error('Error creating auction:', error);
-        if (error.message.includes('End time must be in the future')) {
-            res.status(400).json({ error: 'End time must be in the future.' });
-        } else if (error.message.includes('transaction underpriced')) {
-            res.status(400).json({ error: 'Transaction underpriced. Please increase the gas fee.' });
-        } else {
-            res.status(500).json({ error: 'Error creating auction', details: error.message });
-        }
+        res.status(500).json({ error: 'Error creating auction', details: error.message });
     }
 });
+
+
+
 
 // Start server
 app.listen(PORT, () => {
